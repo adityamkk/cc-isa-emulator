@@ -7,7 +7,7 @@ build:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) .
 
 run:
-	go run . $(ARGS)
+	go run . --bin=README.md --cores=15
 
 clean:
 	rm -rf $(BUILD_DIR)
