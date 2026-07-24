@@ -79,20 +79,7 @@ func (ram *RandomAccessMemory) Write1Word(address uint16, data uint16) {
 // AcquireLine acquires a lock on the line that the address belongs to
 func (ram *RandomAccessMemory) AcquireLine(address uint16) {
 	lockIdx := address / LINE_SIZE
-	_lock, ok := ram.linemap.Load(lockIdx)
-	if !ok {
-		var lockNew *sync.Mutex
-		ok := ram.linemap.CompareAndSwap(lockIdx, nil, lockNew)
-		if ok {
-			_lock = lockNew
-		} else {
-			_lock, ok = ram.linemap.Load(lockIdx)
-			if !ok {
-				fmt.Println("Error: The Load failed desipte the CompareAndSwap failing")
-				os.Exit(1)
-			}
-		}
-	}
+	_lock, _ := ram.linemap.LoadOrStore(lockIdx, &sync.Mutex{})
 	lock := _lock.(*sync.Mutex)
 	lock.Lock()
 }
