@@ -2,13 +2,18 @@ package mem
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
+	"os"
 	"sync"
 )
 
+const LINE_SIZE = 64
+
 type RandomAccessMemory struct {
-	Memmap  sync.Map
+	memmap  sync.Map
 	binFile io.ReaderAt
+	linemap sync.Map
 }
 
 func NewRandomAccessMemory(binFile io.ReaderAt) *RandomAccessMemory {
@@ -16,7 +21,7 @@ func NewRandomAccessMemory(binFile io.ReaderAt) *RandomAccessMemory {
 }
 
 func (ram *RandomAccessMemory) Read1Byte(address uint16) uint8 {
-	val, ok := ram.Memmap.Load(address)
+	val, ok := ram.memmap.Load(address)
 	if ok {
 		return val.(uint8)
 	}
@@ -28,8 +33,8 @@ func (ram *RandomAccessMemory) Read1Byte(address uint16) uint8 {
 }
 
 func (ram *RandomAccessMemory) Read1Word(address uint16) uint16 {
-	valFirst, okFirst := ram.Memmap.Load(address)
-	valSecond, okSecond := ram.Memmap.Load(address + 1)
+	valFirst, okFirst := ram.memmap.Load(address)
+	valSecond, okSecond := ram.memmap.Load(address + 1)
 	buf := make([]byte, 2)
 
 	if okFirst && okSecond {
@@ -61,12 +66,45 @@ func (ram *RandomAccessMemory) Read1Word(address uint16) uint16 {
 }
 
 func (ram *RandomAccessMemory) Write1Byte(address uint16, data uint8) {
-	ram.Memmap.Store(address, data)
+	ram.memmap.Store(address, data)
 }
 
 func (ram *RandomAccessMemory) Write1Word(address uint16, data uint16) {
 	buf := make([]byte, 2)
 	binary.LittleEndian.PutUint16(buf, data)
-	ram.Memmap.Store(address, buf[0])
-	ram.Memmap.Store(address+1, buf[1])
+	ram.memmap.Store(address, buf[0])
+	ram.memmap.Store(address+1, buf[1])
+}
+
+// AcquireLine acquires a lock on the line that the address belongs to
+func (ram *RandomAccessMemory) AcquireLine(address uint16) {
+	lockIdx := address / LINE_SIZE
+	_lock, ok := ram.linemap.Load(lockIdx)
+	if !ok {
+		var lockNew *sync.Mutex
+		ok := ram.linemap.CompareAndSwap(lockIdx, nil, lockNew)
+		if ok {
+			_lock = lockNew
+		} else {
+			_lock, ok = ram.linemap.Load(lockIdx)
+			if !ok {
+				fmt.Println("Error: The Load failed desipte the CompareAndSwap failing")
+				os.Exit(1)
+			}
+		}
+	}
+	lock := _lock.(*sync.Mutex)
+	lock.Lock()
+}
+
+// ReleaseLine releases a lock on a line that the address belongs to
+func (ram *RandomAccessMemory) ReleaseLine(address uint16) {
+	lockIdx := address / LINE_SIZE
+	_lock, ok := ram.linemap.Load(lockIdx)
+	if !ok {
+		fmt.Println("Error: Attempted to release an unacquired memory lock")
+		os.Exit(1)
+	}
+	lock := _lock.(*sync.Mutex)
+	lock.Unlock()
 }
