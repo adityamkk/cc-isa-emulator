@@ -5,5 +5,8 @@ import (
 )
 
 func (core *Core) execute(instr *isa.Instruction) (uint16, bool, error) {
-	return uint16(0), true, nil
+	if instr.Raw == 0 {
+		return core.registers.Pc + 2, true, nil
+	}
+	return core.registers.Pc + 2, false, nil
 }

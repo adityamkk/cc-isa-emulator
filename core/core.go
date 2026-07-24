@@ -27,18 +27,14 @@ func NewCore(ram *mem.RandomAccessMemory) *Core {
 }
 
 func (core *Core) fetch(address uint16) uint16 {
-	return uint16(0)
-}
-
-func (core *Core) exec(instr *isa.Instruction) (uint16, bool, error) {
-	return core.execute(instr)
+	return core.ram.Read1Word(address)
 }
 
 func (core *Core) Run() {
 	var stop bool = false
 	for !stop {
 		instr := core.fetch(core.registers.Pc)
-		pcNew, done, err := core.exec(isa.NewInstruction(instr))
+		pcNew, done, err := core.execute(isa.NewInstruction(instr))
 		if err != nil {
 			core.Stop <- err
 			return
